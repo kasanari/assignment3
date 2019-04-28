@@ -59,6 +59,8 @@ struct Context {
     float elapsed_time;
 };
 
+static float zoomFactor = 1;
+
 // Returns the value of an environment variable
 std::string getEnvVar(const std::string &name)
 {
@@ -172,6 +174,15 @@ void init(Context &ctx)
     initializeTrackball(ctx);
 }
 
+glm::vec3 light_position = glm::vec3(0.0f, 0.0f, 5.0f);
+glm::vec3 light_color = glm::vec3(1.0f, 1.0f, 1.0f);
+glm::vec3 ambient_color = glm::vec3(0.0f, 0.007f, 0.0f);
+glm::vec3 diffuse_color = glm::vec3(0.0f, 0.7f, 0.0f);
+glm::vec3 specular_color = glm::vec3(0.05f, 0.05f, 0.05f);
+float specular_power = 32;
+bool gamma_correction = true;
+bool show_normals = false;
+
 // MODIFY THIS FUNCTION
 void drawMesh(Context &ctx, GLuint program, const MeshVAO &meshVAO)
 {
@@ -179,9 +190,18 @@ void drawMesh(Context &ctx, GLuint program, const MeshVAO &meshVAO)
     glm::mat4 model = trackballGetRotationMatrix(ctx.trackball);
     glm::mat4 view = glm::mat4();
     glm::mat4 projection = glm::ortho(-ctx.aspect, ctx.aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+
+	projection = glm::perspective(glm::radians(45.0f*zoomFactor), (float)ctx.width / ctx.height, 0.1f, 5.0f);
+
+	view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f),
+		glm::vec3(0.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f));
+
     glm::mat4 mv = view * model;
     glm::mat4 mvp = projection * mv;
-    // ...
+    
+
+
 
     // Activate program
     glUseProgram(program);
@@ -193,12 +213,30 @@ void drawMesh(Context &ctx, GLuint program, const MeshVAO &meshVAO)
     glUniformMatrix4fv(glGetUniformLocation(program, "u_mv"), 1, GL_FALSE, &mv[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(program, "u_mvp"), 1, GL_FALSE, &mvp[0][0]);
     glUniform1f(glGetUniformLocation(program, "u_time"), ctx.elapsed_time);
-    // ...
-
+	glUniform3fv(glGetUniformLocation(program, "u_light_position"), 1, &light_position[0]);
+	glUniform3fv(glGetUniformLocation(program, "u_light_color"), 1, &light_color[0]);
+	glUniform3fv(glGetUniformLocation(program, "u_ambient_color"), 1, &ambient_color[0]);
+	glUniform3fv(glGetUniformLocation(program, "u_diffuse_color"), 1, &diffuse_color[0]);
+	glUniform3fv(glGetUniformLocation(program, "u_specular_color"), 1, &specular_color[0]);
+	glUniform1f(glGetUniformLocation(program, "u_specular_power"), specular_power);
+	glUniform1ui(glGetUniformLocation(program, "u_gamma_correction"), gamma_correction);
+	glUniform1ui(glGetUniformLocation(program, "u_show_normals"), show_normals);
     // Draw!
     glBindVertexArray(meshVAO.vao);
     glDrawElements(GL_TRIANGLES, meshVAO.numIndices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(ctx.defaultVAO);
+	ImGui::Begin("Settings");
+	ImGui::ColorEdit3("Ambient Color", &ambient_color[0]);
+	ImGui::ColorEdit3("Diffuse Color", &diffuse_color[0]);
+	ImGui::ColorEdit3("Specular Color", &specular_color[0]);
+	ImGui::SliderFloat("Specular Power", &specular_power, 0, 100);
+	ImGui::Separator();
+	ImGui::ColorEdit3("Light Color", &light_color[0]);
+	ImGui::DragFloat3("Light Position", &light_position[0]);
+	ImGui::Separator();
+	ImGui::Checkbox("Gamma Correction", &gamma_correction);
+	ImGui::Checkbox("Show Normals", &show_normals);
+	ImGui::End();
 }
 
 void display(Context &ctx)
@@ -223,6 +261,13 @@ void mouseButtonPressed(Context *ctx, int button, int x, int y)
         ctx->trackball.center = glm::vec2(x, y);
         trackballStartTracking(ctx->trackball, glm::vec2(x, y));
     }
+}
+
+
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	zoomFactor += yoffset/4;
 }
 
 void mouseButtonReleased(Context *ctx, int button, int x, int y)
@@ -317,6 +362,7 @@ int main(void)
     ctx.window = glfwCreateWindow(ctx.width, ctx.height, "Model viewer", nullptr, nullptr);
     glfwMakeContextCurrent(ctx.window);
     glfwSetWindowUserPointer(ctx.window, &ctx);
+	glfwSetScrollCallback(ctx.window, scroll_callback);
     glfwSetKeyCallback(ctx.window, keyCallback);
     glfwSetCharCallback(ctx.window, charCallback);
     glfwSetMouseButtonCallback(ctx.window, mouseButtonCallback);
@@ -334,6 +380,7 @@ int main(void)
 
     // Initialize GUI
     ImGui_ImplGlfwGL3_Init(ctx.window, false /*do not install callbacks*/);
+	
 
     // Initialize rendering
     glGenVertexArrays(1, &ctx.defaultVAO);
